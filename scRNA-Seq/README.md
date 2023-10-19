@@ -99,5 +99,21 @@ system("unzip expression_data_cellranger.zip")
 
 ```
 
-## 2. 
+## 2. Seurat从CellRanger中加载数据到R
+Seurat 是一个用于单细胞数据QC、分析和可视化结果的一个R包。Seurat可以鉴定和解释单细胞转录组异质性的来源，并且整合不同类型单细胞数据。
+包的开发者在也提供了几个教程[tutorial](https://satijalab.org/seurat/articles/get_started.html)。
+
+
+## 3. 质控、过滤和标准化
+
+## 4. 整合多个单细胞样本和批次矫正
+
+## 5. 主成分分析
+
+## 6. 聚类
+
+## 7. 富集分析、差异表达和细胞类型鉴定
+
+## 8. 添加双态检测
+
 
