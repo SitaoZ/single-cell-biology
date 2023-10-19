@@ -109,6 +109,104 @@ system("unzip expression_data_cellranger.zip")
 Seurat 是一个用于单细胞数据QC、分析和可视化结果的一个R包。Seurat可以鉴定和解释单细胞转录组异质性的来源，并且整合不同类型单细胞数据。
 包的开发者在也提供了几个教程[tutorial](https://satijalab.org/seurat/articles/get_started.html)。
 
+```r
+# 导入包
+library(Seurat)
+library(kableExtra)
+library(ggplot2)
+
+# 设置实验目录和数据信息
+experiment_name = "Colon Cancer"
+dataset_loc <- "./expression_data_cellranger"
+ids <- c("A001-C-007", "A001-C-104", "B001-A-301")
+
+# 读取cellranger 样本信息矩阵
+# cellranger对每个样本信息都具有相应的矩阵，
+# 读取, 这里只有一个样本的数据进行展示，ids[1]；后面循环读取采用lapply 
+experiment.metrics <- read.csv(file.path(dataset_loc, ids[1], "outs/metrics_summary.csv"))
+# 转化成dataframe
+sequencing.metrics <- data.frame(t(experiment.metrics[,c(1:19)]))
+# 设置行名
+rownames(sequencing.metrics) <- gsub("\\.", " ", rownames(sequencing.metrics))
+# 设置列名
+colnames(sequencing.metrics) <- "All samples"
+# 使用kableExtra生成表格数据， 在Rstudio中可视化
+sequencing.metrics %>%
+  kable(caption = 'Cell Ranger Results') %>%
+  pack_rows("Overview", 1, 3, label_row_css = "background-color: #666; color: #fff;") %>%
+  pack_rows("Sequencing Characteristics", 4, 9, label_row_css = "background-color: #666; color: #fff;") %>%
+  pack_rows("Mapping Characteristics", 10, 19, label_row_css = "background-color: #666; color: #fff;") %>%
+  kable_styling("striped")
+
+# 循环读取多个文件
+d10x.metrics <- lapply(ids, function(i){
+  metrics <- read.csv(file.path(dataset_loc,paste0(i,"/outs"),"metrics_summary.csv"), colClasses = "character")
+})
+experiment.metrics <- do.call("rbind", d10x.metrics)
+rownames(experiment.metrics) <- ids
+sequencing.metrics <- data.frame(t(experiment.metrics[,c(1:19)]))
+row.names(sequencing.metrics) <- gsub("\\."," ", rownames(sequencing.metrics))
+sequencing.metrics %>%
+  kable(caption = 'Cell Ranger Results') %>%
+  pack_rows("Overview", 1, 3, label_row_css = "background-color: #666; color: #fff;") %>%
+  pack_rows("Sequencing Characteristics", 4, 9, label_row_css = "background-color: #666; color: #fff;") %>%
+  pack_rows("Mapping Characteristics", 10, 19, label_row_css = "background-color: #666; color: #fff;") %>%
+  kable_styling("striped")
+
+
+# 读取cell ranger 矩阵数据，创建基本的Seurat数据对象
+# cellranger 提供了一个函数 aggr能够合并多个样本的数据，转化成一个新的数据
+# Seurat 提供了一个函数 Read10X 和 Read10X_h5来读取10X数据文件夹，
+# 首先我们读取一个文件夹
+# 然后，使用没有标准化的数据创建Seurat对象, CreateSeuratObject. 保留至少检测到200个基因的细胞
+# 同时给每个细胞提取样本名，计算和添加线粒体数据百分比，最后保存原始的Seurat的对象。
+
+# 使用 Cell Ranger (hdf5)读取，创建一个Seurat对象
+d10x.data <- lapply(ids, function(i){
+  d10x <- Read10X_h5(file.path(dataset_loc, i, "/outs","raw_feature_bc_matrix.h5"))
+  colnames(d10x) <- paste(sapply(strsplit(colnames(d10x),split="-"),'[[',1L),i,sep="_")
+  d10x
+})
+names(d10x.data) <- ids
+str(d10x.data)
+
+# 如果没有安装hdf5，则可以直接读取矩阵文件
+
+# d10x.data <- sapply(ids, function(i){
+#   d10x <- Read10X(file.path(dataset_loc, i, "/outs","raw_feature_bc_matrix"))
+#   colnames(d10x) <- paste(sapply(strsplit(colnames(d10x), split="-"), '[[', 1L), i, sep="_")
+#   d10x
+# })
+# names(d10x.data) <- ids
+
+# 创建barcode rank plot from Cell Ranger
+
+
+
+plot_cellranger_cells <- function(ind){
+  xbreaks = c(1,1e1,1e2,1e3,1e4,1e5,1e6)
+  xlabels = c("1","10","100","1000","10k","100K","1M")
+  ybreaks = c(1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000,200000,500000,1000000)
+  ylabels = c("1","2","5","10","2","5","100","2","5","1000","2","5","10k","2","5","100K","2","5","1M")
+
+  pl1 <- data.frame(index=seq.int(1,ncol(d10x.data[[ind]])),
+                    nCount_RNA = sort(Matrix:::colSums(d10x.data[[ind]])+1,decreasing=T),
+                    nFeature_RNA = sort(Matrix:::colSums(d10x.data[[ind]]>0)+1,decreasing=T)) %>%
+    ggplot() + 
+    scale_color_manual(values=c("red2","blue4"), labels=c("Features", "UMI"), name=NULL) +
+    ggtitle(paste("CellRanger filltered cells:",ids[ind],sep=" ")) + xlab("Barcodes") + ylab("counts (UMI or Features") + 
+    scale_x_continuous(trans = 'log2', breaks=xbreaks, labels = xlabels) + 
+    scale_y_continuous(trans = 'log2', breaks=ybreaks, labels = ylabels) +
+    geom_line(aes(x=index, y=nCount_RNA, color = "UMI"), size=1.75) +
+    geom_line(aes(x=index, y=nFeature_RNA, color = "Features"), size=1.25)
+
+  return(pl1)
+}
+
+plot_cellranger_cells(1)
+
+
+
 
 ## 3. 质控、过滤和标准化
 
