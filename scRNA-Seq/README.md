@@ -90,6 +90,12 @@ library(scran)
 
 sessionInfo()
 ```
+注意：seurat的安装可以使用上述方式，也可以使用remotes.
+```r
+remotes::install_github("satijalab/seurat", "seurat5", quiet = TRUE)
+```
+[seurat install](https://satijalab.org/seurat/articles/install)
+
 
 数据下载
 ```r
