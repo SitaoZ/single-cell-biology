@@ -1,5 +1,5 @@
 # single-cell RNA-Seq analysis
-## 1. 软件安装和数据下载
+## 0. 软件安装和数据下载
 单细胞RNA-Seq数据分析主要在Rstudio中运行，需要安装的软件主要包括
 
 ```r
@@ -105,7 +105,7 @@ system("unzip expression_data_cellranger.zip")
 
 ```
 
-## 2. Seurat从CellRanger中加载数据到R
+## 1. Seurat从CellRanger中加载数据到R
 Seurat 是一个用于单细胞数据QC、分析和可视化结果的一个R包。Seurat可以鉴定和解释单细胞转录组异质性的来源，并且整合不同类型单细胞数据。
 包的开发者在也提供了几个教程[tutorial](https://satijalab.org/seurat/articles/get_started.html)。
 
@@ -283,16 +283,43 @@ save(experiment.aggregate,file="original_seurat_object.RData")
 
 
 
-## 3. 质控、过滤和标准化
+## 2. 质控、过滤和标准化
 
-## 4. 整合多个单细胞样本和批次矫正
+## 3. 整合多个单细胞样本和批次矫正
 
-## 5. 主成分分析
+## 4. 主成分分析
 
-## 6. 聚类
+## 5. 聚类
 
-## 7. 富集分析、差异表达和细胞类型鉴定
+## 6. 富集分析、差异表达和细胞类型鉴定
 
-## 8. 添加双态检测
+## 7. 添加双态检测
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 8. Monocle 轨迹分析
+monocle 能可视化单细胞测序数据，引入在模拟时间(Pseudotime)内对各个单细胞进行排序的策略，
+通过利用单细胞在这写过程中的异步性，将他们匹配到相应的生物过程轨迹上，模拟轨迹分析，解析单细胞数据
+在信号通路和发育上的作用。
+monocle也可以用于聚类，差异表达分析等。
+
+
+
+
+## 参考
+[single-cell RNAseq integration](https://satijalab.org/seurat/articles/integration_introduction)
+[Seurate install instructions](https://satijalab.org/seurat/articles/install.html)
+[monocle introduction](https://cole-trapnell-lab.github.io/monocle-release/)
