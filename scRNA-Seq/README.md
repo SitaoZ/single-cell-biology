@@ -181,8 +181,7 @@ str(d10x.data)
 
 # 创建barcode rank plot from Cell Ranger
 
-
-
+# 该代码只画了Features和UMI
 plot_cellranger_cells <- function(ind){
   xbreaks = c(1,1e1,1e2,1e3,1e4,1e5,1e6)
   xlabels = c("1","10","100","1000","10k","100K","1M")
@@ -194,7 +193,7 @@ plot_cellranger_cells <- function(ind){
                     nFeature_RNA = sort(Matrix:::colSums(d10x.data[[ind]]>0)+1,decreasing=T)) %>%
     ggplot() + 
     scale_color_manual(values=c("red2","blue4"), labels=c("Features", "UMI"), name=NULL) +
-    ggtitle(paste("CellRanger filltered cells:",ids[ind],sep=" ")) + xlab("Barcodes") + ylab("counts (UMI or Features") + 
+    ggtitle(paste("CellRanger filltered cells:",ids[ind],sep=" ")) + xlab("Barcodes") + ylab("counts (UMI or Features)") + 
     scale_x_continuous(trans = 'log2', breaks=xbreaks, labels = xlabels) + 
     scale_y_continuous(trans = 'log2', breaks=ybreaks, labels = ylabels) +
     geom_line(aes(x=index, y=nCount_RNA, color = "UMI"), size=1.75) +
@@ -204,7 +203,83 @@ plot_cellranger_cells <- function(ind){
 }
 
 plot_cellranger_cells(1)
+plot_cellranger_cells(1)
+plot_cellranger_cells(1)
 
+# 该代码画Background、Features和UMI
+
+cr_filtered_cells <- as.numeric(gsub(",","",as.character(unlist(sequencing.metrics["Estimated Number of Cells",]))))
+
+plot_cellranger_cells <- function(ind){
+  xbreaks = c(1,1e1,1e2,1e3,1e4,1e5,1e6)
+  xlabels = c("1","10","100","1000","10k","100K","1M")
+  ybreaks = c(1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000,100000,200000,500000,1000000)
+  ylabels = c("1","2","5","10","2","5","100","2","5","1000","2","5","10k","2","5","100K","2","5","1M")
+
+  pl1 <- data.frame(index=seq.int(1,ncol(d10x.data[[ind]])),
+                    nCount_RNA = sort(Matrix:::colSums(d10x.data[[ind]])+1,decreasing=T),
+                    nFeature_RNA = sort(Matrix:::colSums(d10x.data[[ind]]>0)+1,decreasing=T)) %>%
+    ggplot() + 
+    scale_color_manual(values=c("grey50","red2","blue4"), labels=c("UMI_Background", "Features", "UMI_Cells"), name=NULL) +
+    ggtitle(paste("CellRanger filltered cells:",ids[ind],sep=" ")) + xlab("Barcodes") + ylab("counts (UMI or Features)") + 
+    scale_x_continuous(trans = 'log2', breaks=xbreaks, labels = xlabels) + 
+    scale_y_continuous(trans = 'log2', breaks=ybreaks, labels = ylabels) +
+    geom_line(aes(x=index, y=nCount_RNA, color=index<=cr_filtered_cells[ind] , group=1), size=1.75) +
+    geom_line(aes(x=index, y=nFeature_RNA, color="Features", group=1), size=1.25)
+
+  return(pl1)
+}
+
+plot_cellranger_cells(1)
+plot_cellranger_cells(2)
+plot_cellranger_cells(3)
+
+# 创建Seurat对象
+# 过滤标准：去除少于10个细胞出现的基因，去除少于200个Feature的基因
+
+experiment.data <- do.call("cbind", d10x.data)
+
+experiment.aggregate <- CreateSeuratObject(
+  experiment.data,
+  project = experiment_name,
+  min.cells = 10,
+  min.features = 300,
+  names.field = 2,
+  names.delim = "\\_")
+
+experiment.aggregate
+## An object of class Seurat 
+## 21005 features across 30902 samples within 1 assay 
+## Active assay: RNA (21005 features, 0 variable features)
+
+str(experiment.aggregate)
+
+# 比对上线粒体基因组reads的百分比
+# 低质量和死亡的细胞通常会出现线粒体污染
+# 使用PercentageFeatureSet函数计算线粒体QC矩阵
+# 
+experiment.aggregate$percent.mito <- PercentageFeatureSet(experiment.aggregate, pattern = "^MT-")
+summary(experiment.aggregate$percent.mito)
+
+# Seurat对象简介
+# Seurat对象是每个单细胞分析的中心，它存储数据集的全部信息，包括数据，注释，分析等。
+# R slotNames函数可以查看这些对象的slot名称
+slotNames(experiment.aggregate)
+##  [1] "assays"       "meta.data"    "active.assay" "active.ident" "graphs"      
+##  [6] "neighbors"    "reductions"   "images"       "project.name" "misc"        
+## [11] "version"      "commands"     "tools"
+
+head(experiment.aggregate[[]])
+##                             orig.ident nCount_RNA nFeature_RNA percent.mito
+## AAACCCAAGGTCCCTG_A001-C-007 A001-C-007        361          322    2.7700831
+## AAACCCAAGTTACGAA_A001-C-007 A001-C-007        459          399    2.6143791
+## AAACCCAAGTTATGGA_A001-C-007 A001-C-007       2076         1547    0.5780347
+## AAACCCACAACGCCCA_A001-C-007 A001-C-007        854          687    1.5222482
+## AAACCCACAAGTAGTA_A001-C-007 A001-C-007        496          410    2.8225806
+## AAACCCACAGAAGTTA_A001-C-007 A001-C-007        540          466    1.6666667 
+
+# 最后，保存原始对象并查看
+save(experiment.aggregate,file="original_seurat_object.RData")
 
 
 
