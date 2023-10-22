@@ -280,10 +280,149 @@ head(experiment.aggregate[[]])
 
 # 最后，保存原始对象并查看
 save(experiment.aggregate,file="original_seurat_object.RData")
-
+```
 
 
 ## 2. 质控、过滤和标准化
+```r
+# 模块加载
+library(Seurat)
+library(biomaRt)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+
+# 加载第一步骤生成的seurat数据
+load(file="original_seurat_object.RData")
+experiment.aggregate
+set.seed(12345) # 设置随机种子
+
+# 基本的QA/QC数据分析
+## 每个样本中每个细胞的基因数显示5%分位数 以0.05间隔展示数据
+## 5% Quantiles of Genes/Cell by Sample
+kable(do.call("cbind", tapply(experiment.aggregate$nFeature_RNA, 
+                      Idents(experiment.aggregate),quantile,probs=seq(0,1,0.05))),
+      caption = "5% Quantiles of Genes/Cell by Sample") %>% kable_styling()
+## 显示每个样本每个细胞的UMI数量的5%分位数
+kable(do.call("cbind", tapply(experiment.aggregate$nCount_RNA, 
+                                      Idents(experiment.aggregate),quantile,probs=seq(0,1,0.05))),
+      caption = "5% Quantiles of UMI/Cell by Sample") %>% kable_styling()
+## 样品线粒体百分比的5%分位数
+kable(round(do.call("cbind", tapply(experiment.aggregate$percent.mito, Idents(experiment.aggregate),quantile,probs=seq(0,1,0.05))), digits = 3),
+      caption = "5% Quantiles of Percent Mitochondria by Sample") %>% kable_styling()
+
+## 画出上面三个统计的小提琴图
+
+VlnPlot(
+  experiment.aggregate,
+  features = c("nFeature_RNA", "nCount_RNA","percent.mito"),
+  ncol = 1, pt.size = 0.3)
+
+## 画出上面三个统计的ridge图，另一种展示方式
+RidgePlot(experiment.aggregate, features=c("nFeature_RNA","nCount_RNA", "percent.mito"), ncol = 2)
+
+## 绘制每个基因所代表的细胞数分布。
+plot(sort(Matrix::rowSums(GetAssayData(experiment.aggregate) >= 3), decreasing = TRUE) , xlab="gene rank", ylab="number of cells", main="Cells per genes (reads/gene >= 3 )")
+
+## 基因图，细胞间基因表达的散点图(按样品着色)，在建议的过滤截止点处绘制水平线和垂直线。
+FeatureScatter(experiment.aggregate, feature1 = "nCount_RNA", feature2 = "percent.mito", shuffle = TRUE) + geom_vline(xintercept = c(600,12000)) + geom_hline(yintercept = 8)
+FeatureScatter(experiment.aggregate, feature1 = "nFeature_RNA", feature2 = "percent.mito", shuffle = TRUE) + geom_vline(xintercept = c(400,4000)) + geom_hline(yintercept = 8)
+FeatureScatter(experiment.aggregate, "nCount_RNA", "nFeature_RNA", pt.size = 0.5, shuffle = TRUE)  + geom_vline(xintercept = c(600,12000)) + geom_hline(yintercept = c(400, 4000))
+
+# 细胞过滤
+## 我们使用上面的信息过滤掉单元格。在这里，我们选择那些线粒体基因的百分比(最大为8%)，唯一的UMI计数低于1000或大于12,000，并且其中包含至少700个特征。
+table(experiment.aggregate$orig.ident)
+
+experiment.aggregate <- subset(experiment.aggregate, percent.mito <= 8)
+
+experiment.aggregate <- subset(experiment.aggregate, nCount_RNA >= 500 & nCount_RNA <= 12000)
+
+experiment.aggregate <- subset(experiment.aggregate, nFeature_RNA >= 400 & nFeature_RNA < 4000)
+
+experiment.aggregate
+
+table(experiment.aggregate$orig.ident)
+## 过滤之后画图
+RidgePlot(experiment.aggregate, features=c("nFeature_RNA","nCount_RNA", "percent.mito"), ncol = 2)
+
+## 也可以过滤点额外的基因
+## 在创建基础Seurat对象时，我们确实过滤掉了一些基因，记得保留>= 10细胞中表达的所有基因。在过滤细胞之后，你可能想要更积极地使用基因过滤器。Seurat没有提供这样的功能(我可以找到)，所以下面是一个可以这样做的功能，它过滤需要最小值(对数归一化)的基因，在至少400个细胞中，这里表达为1。
+
+experiment.aggregate
+FilterGenes <-
+ function (object, min.value=1, min.cells = 0, genes = NULL) {
+   genes.use <- rownames(object)
+   if (!is.null(genes)) {
+     genes.use <- intersect(genes.use, genes)
+     object@data <- GetAssayData(object)[genes.use, ]
+   } else if (min.cells > 0) {
+     num.cells <- Matrix::rowSums(GetAssayData(object) > min.value)
+     genes.use <- names(num.cells[which(num.cells >= min.cells)])
+     object = object[genes.use, ]
+   }
+  object <- LogSeuratCommand(object = object)
+  return(object)
+}
+
+experiment.aggregate.genes <- FilterGenes(object = experiment.aggregate, min.value = 1, min.cells = 400)
+experiment.aggregate.genes
+rm(experiment.aggregate.genes)
+
+# 下一步就是标准化数据
+?NormalizeData
+experiment.aggregate <- NormalizeData(
+  object = experiment.aggregate,
+  normalization.method = "LogNormalize",
+  scale.factor = 10000)
+
+## 细胞周期基因
+
+# this code is for human samples only!
+s.genes <- (cc.genes$s.genes)
+g2m.genes <- (cc.genes$g2m.genes)
+
+experiment.aggregate <- CellCycleScoring(experiment.aggregate,
+                                         s.features = s.genes,
+                                         g2m.features = g2m.genes,
+                                         set.ident = TRUE)
+table(experiment.aggregate@meta.data$Phase) %>%
+  kable(caption = "Number of Cells in each Cell Cycle Stage", col.names = c("Stage", "Count"), align = "c") %>%
+  kable_styling()
+
+table(Idents(experiment.aggregate))
+
+# 鉴定可变基因
+## 函数FindVariableFeatures通过对log(方差)和log(均值)的关系进行loess平滑拟合来识别最高变异基因（默认为2000个基因），然后使用这些信息对数据进行标准化，并计算标准化数据的方差。这有助于避免选择仅由于表达水平而显得变异的基因。
+?FindVariableFeatures
+
+experiment.aggregate <- FindVariableFeatures(
+  object = experiment.aggregate,
+  selection.method = "vst")
+
+length(VariableFeatures(experiment.aggregate))
+
+top10 <- head(VariableFeatures(experiment.aggregate), 10)
+
+top10
+
+vfp1 <- VariableFeaturePlot(experiment.aggregate)
+vfp1 <- LabelPoints(plot = vfp1, points = top10, repel = TRUE)
+vfp1
+
+# FindVariableFeatures并不是设置Seurat对象的“可变特性”的唯一方法。另一种合理的方法是选择一组“最低表达”基因。
+dim(experiment.aggregate)
+
+min.value = 2
+min.cells = 10
+num.cells <- Matrix::rowSums(GetAssayData(experiment.aggregate, slot = "count") > min.value)
+genes.use <- names(num.cells[which(num.cells >= min.cells)])
+length(genes.use)
+VariableFeatures(experiment.aggregate) <- genes.use
+
+# 最后保存过滤后和标准化的数据
+save(experiment.aggregate, file="pre_sample_corrected.RData")
+```
+
 
 ## 3. 整合多个单细胞样本和批次矫正
 
