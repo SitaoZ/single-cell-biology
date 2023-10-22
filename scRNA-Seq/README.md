@@ -426,6 +426,54 @@ save(experiment.aggregate, file="pre_sample_corrected.RData")
 
 ## 3. 整合多个单细胞样本和批次矫正
 
+```r
+# 最近发展的大部分将单细胞数据集集成的方法可分为两类。第一类是“锚点”基于的方法。在这种方法中，第一步是选择一个批次作为“锚点”，并将其他批次转换为“锚点”批次。在这种方法中，包括MNN、iMAP、SCALEX和Seurat的整合。这种方法的优点是可以在相同的实验条件下研究不同批次的细胞，缺点是由于每个批次中包含的细胞类型未知，无法完全结合每个批次的特征。第二种方法是将所有批次的数据转换到低维空间以校正批次效应，例如在Scanorama、Harmony、DESC和BBKNN中实现。这种第二种方法的优点是提取具有生物学意义的潜在特征并减少噪声的影响，但不能用于差异基因表达分析。许多现有的方法在批次数据集具有相同细胞类型的情况下效果良好，但在不同数据集中涉及不同细胞类型的情况下会失败。最近提出了一种新方法，利用连接图和生成对抗网络（GAN）来消除数据集批次之间的非生物噪声。这种新方法已被证明在数据集具有相同细胞类型和数据集可能具有不同细胞类型的情况下都能很好地工作。
+# 在本研讨会中，我们将介绍Seurat的集成方法。其基本思想是识别处于匹配生物状态(“锚点”)的跨数据集对细胞，并使用它们来纠正数据集之间的技术差异。我们使用的集成方法已经在Seurat中实现，您可以在其出版物中找到该方法的详细信息。
+
+# 导入包
+library(Seurat)
+# 导入Seurat对象
+load(file="pre_sample_corrected.RData")
+experiment.aggregate
+# 分成单个样本
+experiment.split <- SplitObject(experiment.aggregate, split.by = "ident")
+
+# Normalize and find variable features for each individual sample
+# 标准化，为每个样本找到变量特征
+?NormalizeData
+?FindVariableFeatures
+#
+experiment.split <- lapply(X = experiment.split, FUN=function(x){
+  x <- NormalizeData(x)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+# Select features that are repeatedly variable across samples and find integration anchors
+features <- SelectIntegrationFeatures(object.list = experiment.split)
+anchors <- FindIntegrationAnchors(object.list = experiment.split, anchor.features = features)
+
+# Perform integration
+experiment.integrated <- IntegrateData(anchorset = anchors)
+
+# PCA plot before integration
+experiment.test <- NormalizeData(object=experiment.integrated, assay="RNA")
+experiment.test <- ScaleData(object=experiment.test, assay="RNA")
+experiment.test <- FindVariableFeatures(object=experiment.test, assay="RNA")
+experiment.test <- RunPCA(object=experiment.test, assay="RNA")
+DimPlot(object = experiment.test, group.by="ident", reduction="pca", shuffle=TRUE)
+
+# PCA plot after integration
+experiment.test <- ScaleData(object=experiment.integrated, assay="integrated")
+experiment.test <- FindVariableFeatures(object=experiment.test, assay="integrated")
+experiment.test <- RunPCA(object=experiment.test, assay="integrated")
+DimPlot(object = experiment.test, group.by="ident", reduction="pca", shuffle=TRUE)
+
+# saved the integrated data 
+save(experiment.integrated, file="sample_integrated.RData")
+
+```
+
+
 ## 4. 主成分分析
 
 ## 5. 聚类
