@@ -659,8 +659,92 @@ dim(markers)
 table(markers$avg_log2FC > 0)
 table(markers$p_val_adj < 0.05 & markers$avg_log2FC > 0)
 
+VlnPlot(object = experiment.aggregate, features = rownames(markers)[1:2], pt.size = 0.05)
+FeaturePlot(
+    experiment.aggregate,
+    features = c("KCNMA1", "LEFTY1"),
+    cols = c("lightgrey", "blue"),
+    ncol = 2
+)
 
+markers_all <- FindAllMarkers(
+    object = experiment.merged,
+    only.pos = TRUE,
+    min.pct = 0.25,
+    thresh.use = 0.25
+)
+dim(markers_all)
 
+head(markers_all)
+
+table(table(markers_all$gene))
+
+markers_all_single <- markers_all[markers_all$gene %in% names(table(markers_all$gene))[table(markers_all$gene) == 1],]
+
+dim(markers_all_single)
+
+table(table(markers_all_single$gene))
+
+table(markers_all_single$cluster)
+
+head(markers_all_single)
+top10 <- markers_all_single %>% group_by(cluster) %>% top_n(10, avg_log2FC)
+DoHeatmap(
+    object = experiment.merged,
+    features = top10$gene
+)
+
+# Get expression of genes for cells in and out of each cluster
+getGeneClusterMeans <- function(gene, cluster){
+  x <- GetAssayData(experiment.merged)[gene,]
+  m <- tapply(x, ifelse(Idents(experiment.merged) == cluster, 1, 0), mean)
+  mean.in.cluster <- m[2]
+  mean.out.of.cluster <- m[1]
+  return(list(mean.in.cluster = mean.in.cluster, mean.out.of.cluster = mean.out.of.cluster))
+}
+
+## for sake of time only using first six (head)
+means <- mapply(getGeneClusterMeans, head(markers_all[,"gene"]), head(markers_all[,"cluster"]))
+means <- matrix(unlist(means), ncol = 2, byrow = T)
+
+colnames(means) <- c("mean.in.cluster", "mean.out.of.cluster")
+rownames(means) <- head(markers_all[,"gene"])
+markers_all2 <- cbind(head(markers_all), means)
+head(markers_all2)
+
+experiment.clusters <- experiment.aggregate
+experiment.clusters <- RenameIdents(
+  object = experiment.clusters,
+  '0' = 'cell_type_A',
+  '1' = 'cell_type_B',
+  '2' = 'cell_type_C'
+)
+# and so on
+
+DimPlot(object = experiment.clusters, pt.size=0.5, label = T, reduction = "tsne")
+
+experiment.merged$finalcluster <- Idents(experiment.merged)
+head(experiment.merged[[]])
+
+table(experiment.merged$finalcluster, experiment.merged$orig.ident)
+experiment.sample1 <- subset(experiment.merged, orig.ident == "A001-C-007")
+
+DimPlot(object = experiment.sample1, group.by = "RNA_snn_res.0.25", pt.size=0.5, label = TRUE, reduction = "tsne")
+
+experiment.merged$samplecluster = paste(experiment.merged$orig.ident,experiment.merged$finalcluster,sep = '_')
+
+# set the identity to the new variable
+Idents(experiment.merged) <- "samplecluster"
+
+markers.comp <- FindMarkers(experiment.merged, ident.1 = c("A001-C-007_12", "A001-C-104_12"), ident.2= "B001-A-301_12")
+
+head(markers.comp)
+
+experiment.subset <- subset(experiment.merged, samplecluster %in%  c( "A001-C-007_12", "A001-C-104_12", "B001-A-301_12" ))
+DoHeatmap(object = experiment.subset, features = head(rownames(markers.comp),20))
+Idents(experiment.merged) <- "finalcluster"
+
+save(list=grep('experiment', ls(), value = TRUE), file="clusters_seurat_object.RData")
 ```
 
 ## 6. 富集分析、差异表达和细胞类型鉴定
