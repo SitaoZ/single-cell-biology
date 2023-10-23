@@ -518,7 +518,150 @@ JackStrawPlot(object = experiment.aggregate, dims = 1:100) + theme(legend.positi
 save(experiment.aggregate, file="pca_sample_corrected.RData")
 ```
 
-## 5. 聚类
+## 5. 聚类 Clustering
+```r
+# 导入包
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+# 导入Seurat对象
+load(file="pca_sample_corrected.RData")
+experiment.aggregate
+
+# 根据检验，选择前25
+use.pcs = 1:25
+
+# Seurat实现了一种基于图的聚类方法。细胞之间的距离是基于先前确定的主成分进行计算的。
+# 在V4版本中，识别k最近邻的默认方法已更改为annoy（“Approximate Nearest Neighbors Oh Yeah!”）。这是一种广泛用于高维分析的近似最近邻方法，包括单细胞分析在内的许多领域都在使用该方法。大量的社区基准测试表# 明，annoy极大地提高了邻居发现的速度和内存需求，对下游结果的影响可以忽略不计。
+# Seurat先前的方法受到了近期应用图聚类方法于scRNAseq数据的著作的启发。简单来说，Seurat通过共享最近邻（SNN）模块化优化聚类算法来识别细胞簇。首先计算k最近邻（KNN）并构建SNN图，然后优化模块化函数以确定聚类。关于算法的完整描述，请参阅Waltman和van Eck（2013年）的文章《The European Physical Journal B》。您可以使用nn.method=”rann”将设置切换回之前的默认设置。
+# FindClusters函数实现了基于邻居的聚类过程，其中包含一个分辨率参数，用于设置下游聚类的细粒度，增加该值会导致更多的聚类。我倾向于进行一系列的分辨率测试，然后进行调查和选择。
+
+?FindNeighbors
+experiment.aggregate <- FindNeighbors(experiment.aggregate, reduction="pca", dims = use.pcs)
+
+experiment.aggregate <- FindClusters(
+    object = experiment.aggregate,
+    resolution = seq(0.25,4,0.5),
+    verbose = FALSE
+)
+
+head(experiment.aggregate[[]])
+
+sapply(grep("res",colnames(experiment.aggregate@meta.data),value = TRUE),
+       function(x) length(unique(experiment.aggregate@meta.data[,x])))
+
+
+# Plot TSNE coloring for each resolution
+experiment.aggregate <- RunTSNE(
+  object = experiment.aggregate,
+  reduction.use = "pca",
+  dims = use.pcs,
+  do.fast = TRUE)
+
+DimPlot(object = experiment.aggregate, group.by=grep("res",colnames(experiment.aggregate@meta.data),value = TRUE)[1:4], ncol=2 , pt.size=3.0, reduction = "tsne", label = T)
+DimPlot(object = experiment.aggregate, group.by=grep("res",colnames(experiment.aggregate@meta.data),value = TRUE)[5:8], ncol=2 , pt.size=3.0, reduction = "tsne", label = T)
+
+# Choosing a resolution
+# 选择一个分辨率的作图
+Idents(experiment.aggregate) <- "RNA_snn_res.1.25"
+table(Idents(experiment.aggregate),experiment.aggregate$orig.ident)
+
+DimPlot(object = experiment.aggregate, pt.size=0.5, reduction = "tsne", label = T)
+
+# uMAP降维图
+experiment.aggregate <- RunUMAP(
+  object = experiment.aggregate,
+  dims = use.pcs)
+DimPlot(object = experiment.aggregate, pt.size=0.5, reduction = "umap", label = T)
+
+DimPlot(object = experiment.aggregate, pt.size=0.5, group.by = "Phase", reduction = "umap")
+
+
+# 是否可以使用特征图来绘制读值元数据，如nUMI、feature count和百分比Mito
+FeaturePlot(experiment.aggregate, features = c('nCount_RNA'), pt.size=0.5)
+FeaturePlot(experiment.aggregate, features = c('nFeature_RNA'), pt.size=0.5)
+FeaturePlot(experiment.aggregate, features = c('percent.mito'), pt.size=0.5)
+
+# 在默认的“Ident”(当前为“RNA_snn_res.1.25”)中建立与每个组的“平均”细胞相关的系统发育树。树的估计基于在基因表达空间或主成分分析空间中构建的距离矩阵。
+Idents(experiment.aggregate) <- "RNA_snn_res.1.25"
+experiment.aggregate <- BuildClusterTree(
+  experiment.aggregate, dims = use.pcs)
+
+PlotClusterTree(experiment.aggregate)
+
+# 创建新的数据
+DimPlot(object = experiment.aggregate, pt.size=0.5, label = TRUE, reduction = "umap")
+DimPlot(experiment.aggregate, pt.size = 0.5, label = TRUE, reduction = "tsne")
+experiment.merged = experiment.aggregate
+Idents(experiment.merged) <- "RNA_snn_res.1.25"
+
+experiment.merged <- RenameIdents(
+  object = experiment.merged,
+  '21' = '0',
+  '25' = '3'
+)
+
+table(Idents(experiment.merged))
+DimPlot(object = experiment.merged, pt.size=0.5, label = T, reduction = "umap")
+DimPlot(experiment.merged, pt.size = 0.5, label = TRUE, reduction = "tsne" )
+VlnPlot(object = experiment.merged, features = "percent.mito", pt.size = 0.05)
+
+# 记录cluster
+
+experiment.examples <- experiment.merged
+levels(experiment.examples@active.ident)
+experiment.examples@active.ident <- relevel(experiment.examples@active.ident, "12")
+levels(experiment.examples@active.ident)
+# now cluster 12 is the "first" factor
+
+DimPlot(object = experiment.examples, pt.size=0.5, label = T, reduction = "umap")
+
+VlnPlot(object = experiment.examples, features = "percent.mito", pt.size = 0.05)
+
+# relevel all the factors to the order I want
+neworder <- sample(levels(experiment.examples), replace=FALSE)
+Idents(experiment.examples) <- factor(experiment.examples@active.ident, levels=neworder)
+levels(experiment.examples@active.ident)
+
+DimPlot(object = experiment.examples, pt.size=0.5, label = T, reduction = "umap")
+VlnPlot(object = experiment.examples, features = "percent.mito", pt.size = 0.05)
+
+newIdent = as.character(Idents(experiment.examples))
+newIdent[newIdent == '0'] = paste0("R",as.character(experiment.examples$RNA_snn_res.3.75[newIdent == '0']))
+
+Idents(experiment.examples) <- as.factor(newIdent)
+table(Idents(experiment.examples))
+
+DimPlot(object = experiment.examples, pt.size=0.5, label = T, reduction = "umap")
+DimPlot(object = experiment.aggregate, group.by="orig.ident", pt.size=0.5, reduction = "umap", shuffle = TRUE)
+
+## Pretty umap using alpha
+alpha.use <- 2/5
+p <- DimPlot(object = experiment.aggregate, group.by="orig.ident", pt.size=0.5, reduction = "umap", shuffle = TRUE)
+p$layers[[1]]$mapping$alpha <- alpha.use
+p + scale_alpha_continuous(range = alpha.use, guide = F)
+
+# create a new tmp object with those removed
+experiment.aggregate.tmp <- experiment.aggregate[,-which(Idents(experiment.aggregate) %in% c("23"))]
+
+dim(experiment.aggregate)
+
+dim(experiment.aggregate.tmp)
+DimPlot(object = experiment.aggregate.tmp, pt.size=0.5, reduction = "umap", label = T)
+
+# 鉴定marker基因
+?FindMarkers
+markers = FindMarkers(experiment.aggregate, ident.1=c(4,13), ident.2 = c(6,7))
+
+head(markers)
+dim(markers)
+table(markers$avg_log2FC > 0)
+table(markers$p_val_adj < 0.05 & markers$avg_log2FC > 0)
+
+
+
+```
 
 ## 6. 富集分析、差异表达和细胞类型鉴定
 
