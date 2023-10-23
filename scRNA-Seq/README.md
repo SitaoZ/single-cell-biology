@@ -476,6 +476,48 @@ save(experiment.integrated, file="sample_integrated.RData")
 
 ## 4. 主成分分析
 
+```r
+# 导入包
+library(Seurat)
+library(biomaRt)
+library(knitr)
+library(ggplot2)
+
+# 导入之前的Seurat数据
+load(file="pre_sample_corrected.RData")
+experiment.aggregate
+
+# Scale数据
+experiment.aggregate <- ScaleData(
+  object = experiment.aggregate,
+  vars.to.regress = c("S.Score", "G2M.Score", "percent.mito", "nFeature_RNA"))
+
+# 进行PCA降维
+?RunPCA
+experiment.aggregate <- RunPCA(object = experiment.aggregate, npcs=100)
+
+# 可视化PCA结果
+VizDimLoadings(experiment.aggregate, dims = 1, ncol = 1) + theme_minimal(base_size = 8) # 可视化PC_1
+VizDimLoadings(experiment.aggregate, dims = 2, ncol = 1) + theme_minimal(base_size = 8) # 可视化PC_2
+DimPlot(object = experiment.aggregate, reduction = "pca") # 两个主成分展示
+# 绘制聚焦于主成分的热图。细胞和基因都是根据它们的主成分得分来排序的。允许很好地可视化数据集中的异构源。
+DimHeatmap(object = experiment.aggregate, dims = 1:6, cells = 500, balanced = TRUE) 
+DimHeatmap(object = experiment.aggregate, dims = 7:12, cells = 500, balanced = TRUE)
+
+# 选择哪些主成分用于展示
+# 为了克服单个基因的技术噪音，Seurat根据其PCA分数将细胞聚类，每个主成分本质上代表了一个元基因，将相关基因集的信息结合起来。因此，在下游确定包含多少个主成分是一项重要的步骤。
+# ElbowPlot绘制主成分的标准差（或如果运行PCA快速算法，则为近似奇异值），以便在图中容易识别出拐点。这个拐点通常很好地对应于显著的主成分，并且运行速度更快。这是选择主成分的传统方法。
+ElbowPlot(experiment.aggregate, ndims = 100)
+
+# JackStraw函数随机对数据的一个子集进行排列，并计算这些“随机”基因的投影PCA分数，然后将“随机”基因的PCA分数与观察到的PCA分数进行比较，以确定统计学上的显著性。最终结果是每个基因与每个主成分的关联的p值。我们将具有低p值基因的主成分视为显著的主成分。
+experiment.aggregate <- JackStraw(object = experiment.aggregate, dims = 100)
+experiment.aggregate <- ScoreJackStraw(experiment.aggregate, dims = 1:100)
+JackStrawPlot(object = experiment.aggregate, dims = 1:100) + theme(legend.position="bottom")
+
+# 保存文件，进行下游分析
+save(experiment.aggregate, file="pca_sample_corrected.RData")
+```
+
 ## 5. 聚类
 
 ## 6. 富集分析、差异表达和细胞类型鉴定
