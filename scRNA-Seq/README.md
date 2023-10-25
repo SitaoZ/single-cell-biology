@@ -1,4 +1,86 @@
 # single-cell RNA-Seq analysis
+## prepare 
+使用cellranger 获取fastq文件，
+10x genomics 测序下机的文件目录为：
+![image](https://github.com/SitaoZ/single-cell-biology/assets/29169319/fecc084d-d44b-46d2-988e-257c2dff971a)
+需要使用cellranger mkfastq将单细胞测序的数据转化成fastq文件，mkfastq测序封装了bcl2fastq, 可以将bcl(binary base call)转化成fastq.
+使用的脚本如下
+```bash
+module load bcl2fastq2
+cellranger mkfastq --id=test \
+                   --run=/path/to/the/run/folder \
+                   --csv=test.csv \
+                   --jobmode=local \
+                   --localmem=40 \
+                   --localcores=12
+# 生成的test.csv文件是三列用，分隔的文件
+Lane,Sample,Index
+1,test_sample,SI-GA-A3
+```
+生成fastq后可以将read比对到参考基因组，使用cellranger count
+```bash
+cellranger count --id=sample345 \
+                   --transcriptome=/opt/refdata-cellranger-GRCh38-3.0.0 \
+                   --fastqs=/home/test/outs/fastq_path/HAWT7ADXX/test_sample/ \
+                   --sample=mysample \
+                   --expect-cells=6000
+# 生成的文件在--id指定的sample345目录下，下面有一个outs目录，里面有给Seurat处理的filtered_feature_bc_matrix文件夹，下面有三个文件barcodes.tsv.gz, feature.tsv.gz和matrix.mtx.gz
+ls -sh outs/filtered_feature_bc_matrix/
+# total 90M
+# 60K barcodes.tsv.gz  300K features.tsv.gz   90M matrix.mtx.gz
+
+# 三个文件的作用，
+# barcodes.tsv.gz包括cell barcode 用于cellranger filter
+zcat barcodes.tsv.gz | head -5
+# AAACCCAAGCGCCCAT-1
+# AAACCCAAGGTTCCGC-1
+# AAACCCACAGAGTTGG-1
+# AAACCCACAGGTATGG-1
+# AAACCCACATAGTCAC-1
+# how many cells (barcodes)?
+zcat barcodes.tsv.gz | wc -l
+# 11769
+# The `features.tsv.gz` contains the ENSEMBLE id and gene symbol
+zcat features.tsv.gz | head -5
+# ENSG00000243485 MIR1302-2HG     Gene Expression
+# ENSG00000237613 FAM138A Gene Expression
+# ENSG00000186092 OR4F5   Gene Expression
+# ENSG00000238009 AL627309.1      Gene Expression
+# ENSG00000239945 AL627309.3      Gene Expression
+
+## how many genes?
+zcat features.tsv.gz | wc -l
+# 33538
+
+# matrix.mtx.gz is a sparse matrix which contains the non-zero counts
+zcat matrix.mtx.gz | head -10
+# %%MatrixMarket matrix coordinate integer general
+# %metadata_json: {"format_version": 2, "software_version": "3.0.0"}
+# 33538 11769 24825783
+# 33509 1 1
+# 33506 1 4
+# 33504 1 2
+# 33503 1 10
+# 33502 1 5
+# 33500 1 20
+# 33499 1 9
+# 大多数entries是0，因此稀疏矩阵有效地减少了存储空间。
+# 矩阵解释：33538 x 11769 表示矩阵的维度，包括的全部的非零元素为24825783个
+# 33509 1 是行列索引，行表示基因，列表示细胞；1 表示计数
+# 33506 1 表示行列索引，4表示计数
+```
+
+cellranger 软件运行非常慢，20个CPU处理小鼠的单细胞RNA-Seq数据需要运行几天，因此需要一些工具来替换，常用的工具主要有，
+[Alevin](https://salmon.readthedocs.io/en/latest/alevin.html)
+[Kallisto/bustools](https://www.kallistobus.tools/)
+[Scumi](https://bitbucket.org/jerry00/scumi-dev/src/master/)
+
+### 公共单细胞数据
+[scRNAseq bioc package](https://bioconductor.org/packages/devel/data/experiment/html/scRNAseq.html)
+[scRNAseqdb](https://bioinfo.uth.edu/scrnaseqdb/)
+[Broad single cell portal](https://singlecell.broadinstitute.org/single_cell)
+
+
 ## 0. 软件安装和数据下载
 单细胞RNA-Seq数据分析主要在Rstudio中运行，需要安装的软件主要包括
 
