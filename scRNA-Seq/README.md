@@ -831,7 +831,198 @@ save(list=grep('experiment', ls(), value = TRUE), file="clusters_seurat_object.R
 
 ## 6. 富集分析、差异表达和细胞类型鉴定
 
-## 7. 添加双态检测
+```r
+# 导入包
+library(Seurat)
+library(ggplot2)
+library(limma)
+library(topGO)
+
+# 导入Seurat对象
+load("clusters_seurat_object.RData")
+experiment.merged
+
+Idents(experiment.merged) <- "finalcluster"
+
+# 1 在一个cluster中进行GO分析
+cluster12 <- subset(experiment.merged, idents = '12')
+expr <- as.matrix(GetAssayData(cluster12))
+
+# 在该cluster中去除基因表达量为0基因
+bad <- which(rowSums(expr) == 0)
+expr <- expr[-bad,]
+
+# 选择在至少一半的细胞中表达量大于0的基因
+n.gt.0 <- apply(expr, 1, function(x)length(which(x > 0)))
+expressed.genes <- rownames(expr)[which(n.gt.0/ncol(expr) >= 0.5)]
+all.genes <- rownames(expr)
+
+# 定义geneList，如果表达了就是1，不表达就是0
+geneList <- ifelse(all.genes %in% expressed.genes, 1, 0)
+names(geneList) <- all.genes
+
+# 创建 topGOdata对象
+GOdata <- new("topGOdata",
+                ontology = "BP", # use biological process ontology
+                allGenes = geneList,
+                geneSelectionFun = function(x)(x == 1),
+              annot = annFUN.org, mapping = "org.Hs.eg.db", ID = "symbol")
+
+# 使用Fisher测验检验富集分析的结果
+resultFisher <- runTest(GOdata, algorithm = "elim", statistic = "fisher")
+        GenTable(GOdata, Fisher = resultFisher, topNodes = 20, numChar = 60)
+
+# 2. 在limma包中使用基于建模的差异表达分析
+
+# 选择至少在10%的细胞中表达的基因
+keep <- rownames(expr)[which(n.gt.0/ncol(expr) >= 0.1)]
+expr2 <- expr[keep,]
+
+# 设计矩阵用于统计模型分析
+cluster12$proper.ident <- make.names(cluster12$orig.ident)
+mm <- model.matrix(~0 + proper.ident + S.Score + G2M.Score + percent.mito + nFeature_RNA, data = cluster12[[]])
+head(mm)
+
+tail(mm)
+
+# Fit model in limma
+fit <- lmFit(expr2, mm)
+head(coef(fit))
+
+# 检验'B001-A-301' - 'A001-C-007'两个样本
+contr <- makeContrasts(proper.identB001.A.301 - proper.identA001.C.007, levels = colnames(coef(fit)))
+contr
+
+fit2 <- contrasts.fit(fit, contrasts = contr)
+fit2 <- eBayes(fit2)
+out <- topTable(fit2, n = Inf, sort.by = "P")
+head(out, 30)
+
+# 使用scMRMA鉴定细胞类型
+
+# 首先安装scMRMA
+# install.packages("devtools")
+# devtools::install_github("JiaLiVUMC/scMRMA")
+
+suppressPackageStartupMessages(library(scMRMA))
+result <- scMRMA(input = experiment.merged,
+                 species = "Hs",
+                 db = "panglaodb")
+
+table(result$uniformR$annotationResult)
+
+# 将细胞类型注释的结果添加到metadata
+experiment.merged <- AddMetaData(experiment.merged, result$uniformR$annotationResult, col.name = "CellType")
+table(experiment.merged$CellType, experiment.merged$orig.ident)
+
+table(experiment.merged$CellType, experiment.merged$finalcluster)
+
+DimPlot(experiment.merged, group.by = "CellType", label = TRUE)
+
+```
+
+## 7. Doublet去除
+在单细胞RNA测序实验中，双联体(doublets)是由两个细胞生成的人工文库。它们通常是由于细胞分选或捕获中的错误而产生的，特别是在涉及数千个细胞的基于液滴的方案中。
+使用DoubletFinder包去除。
+```r
+# 双联体去除DoubletFinder
+
+# 首先需要安装 DoubletFinder
+if (!any(rownames(installed.packages()) == "DoubletFinder")){
+  remotes::install_github('chris-mcginnis-ucsf/DoubletFinder')
+}
+
+#  导入包
+library(DoubletFinder)
+library(Seurat)
+library(kableExtra)
+library(ggplot2)
+
+experiment_name = "Colon Cancer"
+dataset_loc <- "./expression_data_cellranger"
+ids <- c("A001-C-007", "A001-C-104", "B001-A-301")
+
+d10x.data <- lapply(ids[1], function(i){
+  d10x <- Read10X_h5(file.path(dataset_loc, i, "outs","raw_feature_bc_matrix.h5"))
+  colnames(d10x) <- paste(sapply(strsplit(colnames(d10x),split="-"),'[[',1L),i,sep="-")
+  d10x
+})
+names(d10x.data) <- ids[1]
+
+str(d10x.data)
+
+experiment.data <- CreateSeuratObject(
+  d10x.data[[1]],
+  project = "A001-C-007",
+  min.cells = 0,
+  min.features = 200,
+  names.field = 2,
+  names.delim = "\\-")
+
+
+
+experiment.data$percent.mito <- PercentageFeatureSet(experiment.data, pattern = "^MT-")
+summary(experiment.data$percent.mito)
+
+VlnPlot(
+  experiment.data,
+  features = c("nFeature_RNA", "nCount_RNA","percent.mito"),
+  ncol = 1, pt.size = 0.3)
+
+
+RidgePlot(experiment.data, features=c("nFeature_RNA","nCount_RNA", "percent.mito"), log=T, ncol = 2)
+
+
+table(experiment.data$orig.ident)
+
+experiment.data <- subset(experiment.data, percent.mito <= 8)
+
+experiment.data <- subset(experiment.data, nFeature_RNA >= 400 & nFeature_RNA <= 4000)
+
+experiment.data <- subset(experiment.data, nCount_RNA >= 500 & nCount_RNA <= 12000)
+
+experiment.data
+
+table(experiment.data$orig.ident)
+RidgePlot(experiment.data, features=c("nFeature_RNA","nCount_RNA", "percent.mito"), log=T, ncol = 2)
+
+
+experiment.data <- NormalizeData(experiment.data)
+experiment.data <- FindVariableFeatures(experiment.data, selection.method = "vst", nfeatures = 2000)
+experiment.data <- ScaleData(experiment.data)
+experiment.data <- RunPCA(experiment.data)
+experiment.data <- FindNeighbors(experiment.data, reduction="pca", dims = 1:20)
+experiment.data <- FindClusters(
+    object = experiment.data,
+    resolution = seq(0.25,4,0.5),
+    verbose = FALSE
+)
+experiment.data <- RunUMAP(experiment.data, dims=1:20)
+DimPlot(object = experiment.data, pt.size=0.5, reduction = "umap", label = T)
+
+
+sweep.res <- paramSweep_v3(experiment.data, PCs = 1:20, sct = FALSE)
+
+sweep.stats <- summarizeSweep(sweep.res, GT = FALSE)
+bcmvn <- find.pK(sweep.stats)
+
+pK.set <- unique(sweep.stats$pK)[2]
+nExp_poi <- round(0.08*nrow(experiment.data@meta.data))
+
+experiment.data <- doubletFinder_v3(experiment.data, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(pK.set)), nExp = nExp_poi, reuse.pANN = FALSE, sct = FALSE)
+
+annotations <- experiment.data@meta.data$seurat_clusters
+homotypic.prop <- modelHomotypic(annotations)
+nExp_poi <- round(0.08*nrow(experiment.data@meta.data))
+nExp_poi.adj <- round(nExp_poi*(1-homotypic.prop))
+experiment.data <- doubletFinder_v3(experiment.data, PCs = 1:20, pN = 0.25, pK = as.numeric(as.character(pK.set)), nExp = nExp_poi.adj, reuse.pANN = "pANN_0.25_0.02_142", sct = FALSE)
+
+experiment.data <- subset(experiment.data,  DF.classifications_0.25_0.02_142 == "Singlet")
+
+sessionInfo()
+
+```
+
 
 
 
