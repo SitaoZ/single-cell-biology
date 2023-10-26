@@ -1024,27 +1024,14 @@ sessionInfo()
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## 8. Monocle 轨迹分析
 monocle 能可视化单细胞测序数据，引入在模拟时间(Pseudotime)内对各个单细胞进行排序的策略，
 通过利用单细胞在这写过程中的异步性，将他们匹配到相应的生物过程轨迹上，模拟轨迹分析，解析单细胞数据
 在信号通路和发育上的作用。
 monocle也可以用于聚类，差异表达分析等。
 
+[Monocle](https://lishensuo.github.io/posts/bioinfo/008%E5%8D%95%E7%BB%86%E8%83%9E%E5%88%86%E6%9E%90%E5%B7%A5%E5%85%B7--monocle%E8%BD%A8%E8%BF%B9%E5%88%86%E6%9E%90/)
+[TSCAN](https://bioconductor.org/books/3.15/OSCA.advanced/trajectory-analysis.html#overview-5)
 
 
 
