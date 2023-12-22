@@ -3,6 +3,7 @@
 使用cellranger 获取fastq文件，
 10x genomics 测序下机的文件目录为：
 ![image](https://github.com/SitaoZ/single-cell-biology/assets/29169319/fecc084d-d44b-46d2-988e-257c2dff971a)
+
 需要使用cellranger mkfastq将单细胞测序的数据转化成fastq文件，mkfastq测序封装了bcl2fastq, 可以将bcl(binary base call)转化成fastq.
 使用的脚本如下
 ```bash
