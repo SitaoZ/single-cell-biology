@@ -1,6 +1,7 @@
 ## STAR 
 STAR 软件可以用来处理10xgenomics的单细胞测序数据，可以对数据进行barcoder、UMI进行处理，
 可以进行定量分析，生成barcodes.tsv、features.tsv、matrix.mtx文件，用于单细胞数据的分析。
+STRA可以生成和CellRanger类似的结果，可以参考[STAR issue](https://github.com/alexdobin/STAR/issues/2026) [STARsolo](https://github.com/alexdobin/STAR/blob/master/docs/STARsolo.md#how-to-make-starsolo-raw-gene-counts-almost-identical-to-cellrangers)
 
 ## 基因组和注释文件下载
 
