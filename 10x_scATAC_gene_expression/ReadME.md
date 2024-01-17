@@ -37,7 +37,8 @@ tree 10xMultiome/e18_mouse_brain_fresh_5k
 ```
 
 ## 二、barcodes 序列下载
-barcodes可以从10x官网下载，也可以从该链接下载。如何安装了cellranger，也可用从lib/python/cellranger/barcodes和lib/python/atac/barcodes拷贝。
+barcodes whitelist: 试剂盒中已知的barcodes序列，例如gex_737K-arc-v1.txt含有736,319。
+barcodes可以从cellrager下载![10x](https://kb.10xgenomics.com/hc/en-us/articles/4412343032205-Where-can-I-find-the-barcode-whitelist-s-for-Single-Cell-Multiome-ATAC-GEX-product-)，路径为lib/python/cellranger/barcodes和lib/python/atac/barcodes拷贝，也可以从该链接下载。
 
 ```bash
 # download the GEX expression whitelist
