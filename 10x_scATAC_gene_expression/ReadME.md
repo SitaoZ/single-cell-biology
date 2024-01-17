@@ -13,6 +13,8 @@ wget -P 10xMultiome -c https://s3-us-west-2.amazonaws.com/10x.files/samples/cell
 tar xf 10xMultiome/e18_mouse_brain_fresh_5k_fastqs.tar -C 10xMultiome/
 
 # 解压缩的数据
+tree 10xMultiome/e18_mouse_brain_fresh_5k
+
 10xMultiome/e18_mouse_brain_fresh_5k
 ├── atac
 │   ├── e18_mouse_brain_fresh_5k_S1_L001_I1_001.fastq.gz
