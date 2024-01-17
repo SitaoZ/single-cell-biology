@@ -35,3 +35,23 @@ tree 10xMultiome/e18_mouse_brain_fresh_5k
     ├── e18_mouse_brain_fresh_5k_S1_L002_R1_001.fastq.gz
     └── e18_mouse_brain_fresh_5k_S1_L002_R2_001.fastq.gz
 ```
+
+## 二、barcodes 序列下载
+barcodes可以从10x官网下载，也可以从该链接下载。如何安装了cellranger，也可用从lib/python/cellranger/barcodes和lib/python/atac/barcodes拷贝。
+
+```bash
+# download the GEX expression whitelist
+wget -P 10xMultiome/ https://teichlab.github.io/scg_lib_structs/data/gex_737K-arc-v1.txt.gz
+gunzip 10xMultiome/gex_737K-arc-v1.txt.gz
+
+# download the atac whitelist
+wget -P 10xMultiome/ https://teichlab.github.io/scg_lib_structs/data/atac_737K-arc-v1.txt.gz
+gunzip 10xMultiome/atac_737K-arc-v1.txt.gz
+
+# reverse complement the atac whitelist
+cat 10xMultiome/atac_737K-arc-v1.txt | \
+    rev | tr 'ACGT' 'TGCA' > \
+    10xMultiome/atac_737K-arc-v1_rc.txt
+
+
+```
